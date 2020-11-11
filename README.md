@@ -1,7 +1,7 @@
 
 # Backend for Giganotes note taking app
 
-Giganotes Backend is intended to be used by [GigaNotes Desktop](https://github.com/FourthByteLabs/giganotes-desktop) and [GigaNotes Mobile](https://github.com/FourthByteLabs/giganotes-mobile) applications. 
+Giganotes Backend is intended to be used by [GigaNotes Desktop](https://github.com/giganotes/giganotes-desktop) and [GigaNotes Mobile](https://github.com/giganotes/giganotes-mobile) applications. 
 
 # API integration
 
