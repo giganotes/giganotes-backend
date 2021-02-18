@@ -206,12 +206,10 @@ func loginSocial(c echo.Context) error {
 func verifyGoogleToken(token string) bool {
 	v := googleAuthIDTokenVerifier.Verifier{}
 
-	audWeb := Config.GetString("googleAuthAudWeb")
-	audDesktop := Config.GetString("googleAuthAudDesktop")
-	audMobile := Config.GetString("googleAuthAudMobile")
-
+	aud := Config.GetString("googleAuthAud")
 	err := v.VerifyIDToken(token, []string{
-		audWeb, audDesktop, audMobile})
+		aud,
+	})
 
 	return err == nil
 }
@@ -957,7 +955,7 @@ func searchNotes(c echo.Context) error {
 }
 
 func version(c echo.Context) error {
-	return c.JSON(http.StatusOK, "Version 1.0.14")
+	return c.JSON(http.StatusOK, "Version 1.0.13")
 }
 
 func anotherAppUpdate(c echo.Context) error {
