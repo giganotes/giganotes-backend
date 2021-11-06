@@ -1,14 +1,22 @@
 package giganotes
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"golang.org/x/net/html/atom"
+	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/html"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	googleAuthIDTokenVerifier "github.com/futurenda/google-auth-id-token-verifier"
@@ -24,6 +32,7 @@ const contextKey string = "user"
 var (
 	upgrader        = websocket.Upgrader{}
 	createUserMutex = sync.Mutex{}
+	GIGANOTES_SERVER_VERSION = "1.21"
 )
 
 func init() {
@@ -704,6 +713,86 @@ func removeNote(c echo.Context) error {
 	return c.JSON(http.StatusOK, "OK")
 }
 
+func downloadImageAsBase64(url string) (string, error) {
+	// Download image, convert to Base64
+	response, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+
+	if response.StatusCode != 200 {
+		return "", err
+	}
+
+	buf := new(bytes.Buffer)
+
+	_, err = io.Copy(buf, response.Body)
+	if err != nil {
+		return "", err
+	}
+
+	imgBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+	mimeType := http.DetectContentType(buf.Bytes())
+	dataContent := "data:" + mimeType + ";base64," + imgBase64
+	return dataContent, nil
+}
+func extractImages(node *html.Node) int {
+	imagesExtracted := 0
+
+	if node.Type == html.ElementNode && node.DataAtom == atom.Img {
+		for i := range node.Attr {
+			img := &node.Attr[i]
+			if img.Key == "src" {
+				if strings.HasPrefix(img.Val, "data:") {
+					continue
+				}
+				newRef, err := downloadImageAsBase64(img.Val)
+				if err != nil {
+					continue
+				}
+				// Modify reference to local value
+				img.Val = newRef
+
+				imagesExtracted++
+			}
+		}
+	}
+
+	childExtracted := 0
+	for c := node.FirstChild; c != nil; c = c.NextSibling {
+		childExtracted += extractImages(c)
+	}
+	return imagesExtracted + childExtracted
+}
+
+
+func processNote(note *Note) {
+
+	r := strings.NewReader(note.Text)
+	doc, err := html.Parse(r)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	extractedCount := extractImages(doc)
+
+	if extractedCount > 0 {
+		buf := new(bytes.Buffer)
+		err = html.Render(buf, doc)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		note.Text = buf.String()
+		err = db.Unscoped().Save(note).Error
+
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
 // saveNote creates a note if note.ID is blank or updates a note with given ID
 func saveNote(c echo.Context) error {
 	var err error
@@ -731,6 +820,8 @@ func saveNote(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(500, err.Error())
 	}
+
+	go processNote(note)
 
 	event := new(Event)
 	event.Type = 3
@@ -802,6 +893,8 @@ func updateNote(c echo.Context) error {
 	event.ClientType, _ = strconv.Atoi(c.Request().Header.Get("ClientType"))
 	event.ClientID = c.Request().Header.Get("ClientID")
 	db.Create(event)
+
+	go processNote(note)
 
 	return c.JSON(http.StatusOK, "OK")
 }
@@ -955,7 +1048,7 @@ func searchNotes(c echo.Context) error {
 }
 
 func version(c echo.Context) error {
-	return c.JSON(http.StatusOK, "Version 1.0.13")
+	return c.JSON(http.StatusOK, "Version " + GIGANOTES_SERVER_VERSION)
 }
 
 func anotherAppUpdate(c echo.Context) error {

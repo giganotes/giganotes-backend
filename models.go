@@ -33,7 +33,7 @@ func DBConnect(address string) {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for sig := range c {
-			log.Println("%v captured - Closing database connection", sig)
+			log.Printf("%v captured - Closing database connection\n", sig)
 			db.Close()
 			os.Exit(1)
 		}
